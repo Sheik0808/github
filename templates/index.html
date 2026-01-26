@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub Profile Analyzer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="container">
+        <h1>GitHub Profile Analyzer</h1>
+
+        <div class="glass-card" style="max-width: 600px; margin: 0 auto;">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            {% for category, message in messages %}
+            <div class="flash">{{ message }}</div>
+            {% endfor %}
+            {% endif %}
+            {% endwith %}
+
+            <div class="tabs">
+                <button class="tab-btn active" onclick="openTab('link')">Profile Link</button>
+                <button class="tab-btn" onclick="openTab('upload')">Upload File</button>
+            </div>
+
+            <form action="/analyze" method="post" enctype="multipart/form-data">
+                <div id="link" class="tab-content active">
+                    <div class="form-group">
+                        <label>Enter GitHub Profile URL or Username</label>
+                        <input type="text" name="github_link" placeholder="https://github.com/username">
+                    </div>
+                </div>
+
+                <div id="upload" class="tab-content">
+                    <div class="form-group">
+                        <label>Upload Resume (PDF/TXT) or Excel</label>
+                        <input type="file" name="file_upload" accept=".pdf,.txt,.xlsx,.xls">
+                        <p class="text-muted" style="margin-top: 0.5rem; font-size: 0.8rem;">
+                            We will scan the file for a GitHub profile link.
+                        </p>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-primary">Analyze Profile</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function openTab(tabName) {
+            // Hide all tab content
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            // Deactivate all buttons
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+
+            // Show selected
+            document.getElementById(tabName).classList.add('active');
+            // Activate button (simple approach finding by text or index would be better but this inline is quick)
+            event.target.classList.add('active');
+        }
+    </script>
+</body>
+
+</html>
