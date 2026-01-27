@@ -27,27 +27,43 @@
             <div class="tabs">
                 <button class="tab-btn active" onclick="openTab('link')">Profile Link</button>
                 <button class="tab-btn" onclick="openTab('upload')">Upload File</button>
+                <button class="tab-btn" onclick="openTab('resume')">Resume Matcher</button>
             </div>
 
-            <form action="/analyze" method="post" enctype="multipart/form-data">
+            <form id="mainForm" action="/analyze" method="post" enctype="multipart/form-data">
+                <input type="hidden" name="analysis_type" id="analysis_type" value="github">
+
                 <div id="link" class="tab-content active">
                     <div class="form-group">
-                        <label>Enter GitHub Profile URL or Username</label>
-                        <input type="text" name="github_link" placeholder="https://github.com/username">
+                        <label>Enter GitHub Profile URLs or Usernames (one per line)</label>
+                        <textarea name="github_link" placeholder="https://github.com/username&#10;username2" rows="5"
+                            style="width: 100%; padding: 0.5rem; border-radius: 0.25rem; border: 1px solid #ccc;"></textarea>
                     </div>
                 </div>
 
                 <div id="upload" class="tab-content">
                     <div class="form-group">
-                        <label>Upload Resume (PDF/TXT) or Excel</label>
+                        <label>Upload File (PDF/TXT/Excel)</label>
                         <input type="file" name="file_upload" accept=".pdf,.txt,.xlsx,.xls">
                         <p class="text-muted" style="margin-top: 0.5rem; font-size: 0.8rem;">
-                            We will scan the file for a GitHub profile link.
+                            For GitHub Analysis: We scan for a profile link.<br>
                         </p>
                     </div>
                 </div>
 
-                <button type="submit" class="btn-primary">Analyze Profile</button>
+                <div id="resume" class="tab-content">
+                    <div class="form-group">
+                        <label>Upload Resume (PDF/TXT)</label>
+                        <input type="file" name="resume_upload" accept=".pdf,.txt">
+                    </div>
+                    <div class="form-group" style="margin-top: 1rem;">
+                        <label>Job Description</label>
+                        <textarea name="job_description" placeholder="Paste Job Description here..." rows="5"
+                            style="width: 100%; padding: 0.5rem; border-radius: 0.25rem; border: 1px solid #ccc;"></textarea>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-primary">Analyze</button>
             </form>
         </div>
     </div>

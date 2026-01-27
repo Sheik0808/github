@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard - {{ stats.username }}</title>
+    <title>GitHub Profile Analyzer Results</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,120 +16,142 @@
     <div class="container">
         <a href="/" style="color: var(--text-muted); text-decoration: none;">&larr; Back to Search</a>
 
-        <div class="profile-header">
-            {% if stats.avatar_url %}
-            <img src="{{ stats.avatar_url }}" alt="Avatar" class="avatar">
+        {% if stats_list %}
+        {% for stats in stats_list %}
+        <div class="glass-card" style="margin-bottom: 2rem;">
+            <div class="profile-header">
+                {% if stats.avatar_url %}
+                <img src="{{ stats.avatar_url }}" alt="Avatar" class="avatar">
+                {% endif %}
+                <div class="profile-info">
+                    <h2>{{ stats.username }}</h2>
+                    <a href="{{ stats.profile_url }}" target="_blank" class="profile-link">View on GitHub ↗</a>
+                </div>
+            </div>
+
+            {% if stats.error %}
+            <div class="flash" style="background: rgba(220, 38, 38, 0.2); border-left: 4px solid #ef4444;">
+                {{ stats.error }}
+            </div>
+            {% else %}
+            <div class="stats-grid">
+                <div class="glass-card stat-card">
+                    <div class="stat-value">{{ stats.public_repos }}</div>
+                    <div class="stat-label">Repositories</div>
+                </div>
+                <div class="glass-card stat-card">
+                    <div class="stat-value">{{ stats.contributions_last_year }}</div>
+                    <div class="stat-label">Contributions (Year)</div>
+                </div>
+                <div class="glass-card stat-card">
+                    <div class="stat-value">{{ stats.total_stars }}</div>
+                    <div class="stat-label">Total Stars</div>
+                </div>
+                <div class="glass-card stat-card">
+                    <div class="stat-value">{{ stats.total_forks }}</div>
+                    <div class="stat-label">Total Forks</div>
+                </div>
+            </div>
+
+            <div class="charts-container">
+                <div class="glass-card">
+                    <h3>Language Distribution</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="langChart-{{ loop.index }}"></canvas>
+                    </div>
+                </div>
+                <div class="glass-card">
+                    <h3>Overview</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="barChart-{{ loop.index }}"></canvas>
+                    </div>
+                </div>
+            </div>
             {% endif %}
-            <div class="profile-info">
-                <h2>{{ stats.username }}</h2>
-                <a href="{{ stats.profile_url }}" target="_blank" class="profile-link">View on GitHub ↗</a>
-            </div>
         </div>
-
-        <div class="stats-grid">
-            <div class="glass-card stat-card">
-                <div class="stat-value">{{ stats.public_repos }}</div>
-                <div class="stat-label">Repositories</div>
-            </div>
-            <div class="glass-card stat-card">
-                <div class="stat-value">{{ stats.contributions_last_year }}</div>
-                <div class="stat-label">Contributions (Year)</div>
-            </div>
-            <div class="glass-card stat-card">
-                <div class="stat-value">{{ stats.total_stars }}</div>
-                <div class="stat-label">Total Stars</div>
-            </div>
-            <div class="glass-card stat-card">
-                <div class="stat-value">{{ stats.total_forks }}</div>
-                <div class="stat-label">Total Forks</div>
-            </div>
-        </div>
-
-        <div class="charts-container">
-            <div class="glass-card">
-                <h3>Language Distribution</h3>
-                <div class="chart-wrapper">
-                    <canvas id="langChart"></canvas>
-                </div>
-            </div>
-            <div class="glass-card">
-                <h3>Overview</h3>
-                <div class="chart-wrapper">
-                    <canvas id="barChart"></canvas>
-                </div>
-            </div>
-        </div>
+        {% endfor %}
+        {% else %}
+        <p>No data found.</p>
+        {% endif %}
     </div>
 
     <script>
-        // Prepare data
-        const langData = {{ stats.languages | tojson }};
-        const langLabels = Object.keys(langData);
-        const langValues = Object.values(langData);
-
         // Chart.js defaults for dark mode
         Chart.defaults.color = '#94a3b8';
         Chart.defaults.borderColor = 'rgba(255, 255, 255, 0.1)';
 
-        // Pie Chart
-        const ctxPie = document.getElementById('langChart').getContext('2d');
-        new Chart(ctxPie, {
-            type: 'doughnut',
-            data: {
-                labels: langLabels,
-                datasets: [{
-                    data: langValues,
-                    backgroundColor: [
-                        '#6366f1', '#ec4899', '#8b5cf6', '#14b8a6', '#f59e0b', '#3b82f6'
-                    ],
-                    borderWidth: 0
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'right'
-                    }
-                }
-            }
-        });
+        const statsData = {{ stats_list | tojson }};
 
-        // Bar Chart
-        const ctxBar = document.getElementById('barChart').getContext('2d');
-        new Chart(ctxBar, {
-            type: 'bar',
-            data: {
-                labels: ['Repos', 'Forks', 'Stars'],
-                datasets: [{
-                    label: 'Count',
-                    data: [{{ stats.public_repos }}, {{ stats.total_forks }}, {{ stats.total_stars }}],
-            backgroundColor: [
-            'rgba(99, 102, 241, 0.8)',
-            'rgba(236, 72, 153, 0.8)',
-            'rgba(139, 92, 246, 0.8)'
-        ],
-            borderRadius: 6
-                }]
-            },
-            options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    grid: {
-                        color: 'rgba(255, 255, 255, 0.05)'
+        statsData.forEach((stats, index) => {
+            if (stats.error) return;
+
+            const idx = index + 1; // loop.index is 1-based
+
+            // Prepare data
+            const langData = stats.languages || {};
+            const langLabels = Object.keys(langData);
+            const langValues = Object.values(langData);
+
+            // Pie Chart
+            const ctxPie = document.getElementById(`langChart-${idx}`).getContext('2d');
+            new Chart(ctxPie, {
+                type: 'doughnut',
+                data: {
+                    labels: langLabels,
+                    datasets: [{
+                        data: langValues,
+                        backgroundColor: [
+                            '#6366f1', '#ec4899', '#8b5cf6', '#14b8a6', '#f59e0b', '#3b82f6'
+                        ],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right'
+                        }
                     }
                 }
-            },
-            plugins: {
-                legend: {
-                    display: false
+            });
+
+            // Bar Chart
+            const ctxBar = document.getElementById(`barChart-${idx}`).getContext('2d');
+            new Chart(ctxBar, {
+                type: 'bar',
+                data: {
+                    labels: ['Repos', 'Forks', 'Stars'],
+                    datasets: [{
+                        label: 'Count',
+                        data: [stats.public_repos, stats.total_forks, stats.total_stars],
+                        backgroundColor: [
+                            'rgba(99, 102, 241, 0.8)',
+                            'rgba(236, 72, 153, 0.8)',
+                            'rgba(139, 92, 246, 0.8)'
+                        ],
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.05)'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
                 }
-            }
-        }
+            });
         });
     </script>
 </body>

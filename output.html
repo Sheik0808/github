@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - torvalds</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+    <div class="container">
+        <a href="/" style="color: var(--text-muted); text-decoration: none;">&larr; Back to Search</a>
+
+        <div class="profile-header">
+            
+            <img src="https://avatars.githubusercontent.com/u/1024025?v=4" alt="Avatar" class="avatar">
+            
+            <div class="profile-info">
+                <h2>torvalds</h2>
+                <a href="https://github.com/torvalds" target="_blank" class="profile-link">View on GitHub ↗</a>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="glass-card stat-card">
+                <div class="stat-value">11</div>
+                <div class="stat-label">Repositories</div>
+            </div>
+            <div class="glass-card stat-card">
+                <div class="stat-value">0</div>
+                <div class="stat-label">Contributions (Year)</div>
+            </div>
+            <div class="glass-card stat-card">
+                <div class="stat-value">226362</div>
+                <div class="stat-label">Total Stars</div>
+            </div>
+            <div class="glass-card stat-card">
+                <div class="stat-value">61152</div>
+                <div class="stat-label">Total Forks</div>
+            </div>
+        </div>
+
+        <div class="charts-container">
+            <div class="glass-card">
+                <h3>Language Distribution</h3>
+                <div class="chart-wrapper">
+                    <canvas id="langChart"></canvas>
+                </div>
+            </div>
+            <div class="glass-card">
+                <h3>Overview</h3>
+                <div class="chart-wrapper">
+                    <canvas id="barChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Prepare data
+        const langData = {"C": 9, "C++": 1, "OpenSCAD": 1};
+        const langLabels = Object.keys(langData);
+        const langValues = Object.values(langData);
+
+        // Chart.js defaults for dark mode
+        Chart.defaults.color = '#94a3b8';
+        Chart.defaults.borderColor = 'rgba(255, 255, 255, 0.1)';
+
+        // Pie Chart
+        const ctxPie = document.getElementById('langChart').getContext('2d');
+        new Chart(ctxPie, {
+            type: 'doughnut',
+            data: {
+                labels: langLabels,
+                datasets: [{
+                    data: langValues,
+                    backgroundColor: [
+                        '#6366f1', '#ec4899', '#8b5cf6', '#14b8a6', '#f59e0b', '#3b82f6'
+                    ],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right'
+                    }
+                }
+            }
+        });
+
+        // Bar Chart
+        const ctxBar = document.getElementById('barChart').getContext('2d');
+        new Chart(ctxBar, {
+            type: 'bar',
+            data: {
+                labels: ['Repos', 'Forks', 'Stars'],
+                datasets: [{
+                    label: 'Count',
+                    data: [11, 61152, 226362],
+            backgroundColor: [
+            'rgba(99, 102, 241, 0.8)',
+            'rgba(236, 72, 153, 0.8)',
+            'rgba(139, 92, 246, 0.8)'
+        ],
+            borderRadius: 6
+                }]
+            },
+            options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.05)'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: false
+                }
+            }
+        }
+        });
+    </script>
+</body>
+
+</html>

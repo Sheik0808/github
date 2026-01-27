@@ -118,13 +118,44 @@ def get_github_stats(username):
                 if not calendar:
                     # Fallback for old structure or different view
                     calendar = soup.find('div', class_='js-calendar-graph')
+
+                if not calendar:
+                     # Check for include-fragment (dynamic loading)
+                     include_fragments = soup.find_all('include-fragment')
+                     for frag in include_fragments:
+                         if frag.get('src') and 'contributions' in frag['src']:
+                             print(f"Found contribution fragment: {frag['src']}")
+                             try:
+                                 frag_url = f"https://github.com{frag['src']}"
+                                 frag_resp = requests.get(frag_url, headers=headers)
+                                 if frag_resp.status_code == 200:
+                                     frag_soup = BeautifulSoup(frag_resp.content, 'html.parser')
+                                     calendar = frag_soup.find('table', class_='ContributionCalendar-grid')
+                                     if not calendar:
+                                         calendar = frag_soup.find('div', class_='js-calendar-graph')
+                                     if calendar:
+                                         break
+                             except Exception as e:
+                                 print(f"Error fetching fragment: {e}")
                 
                 if calendar:
                     # The contribution cells are usually 'td' or 'rect' with 'data-level' or 'data-count'
                     print(f"Found contribution calendar. Parsing days...")
                     
-                    days = calendar.find_all(class_=re.compile(r'ContributionCalendar-day'))
+                    # Check tooltips (modern GitHub)
+                    qt_tooltips = calendar.find_all('tool-tip')
                     total_count = 0
+                    days = []
+                    
+                    if qt_tooltips:
+                        print(f"Found {len(qt_tooltips)} tooltips")
+                        for tt in qt_tooltips:
+                            txt = tt.get_text().strip()
+                            match = re.search(r'(\d+)\s+contribution', txt)
+                            if match:
+                                total_count += int(match.group(1))
+                    else:
+                        days = calendar.find_all(class_=re.compile(r'ContributionCalendar-day'))
                     for day in days:
                         # Try to find the count in the sr-only span (screen reader text)
                         sr_only = day.find('span', class_='sr-only')
@@ -171,45 +202,60 @@ def index():
     return render_template('index.html')
 
 @app.route('/analyze', methods=['POST'])
+@app.route('/analyze', methods=['POST'])
 def analyze():
-    username = None
+    usernames = []
     
-    # Check if direct link or username provided
+    # Check if direct link or username provided (handle multiline/comma separated)
     github_input = request.form.get('github_link')
     if github_input:
-        if 'github.com/' in github_input:
-            username = extract_github_username(github_input)
-        else:
-            username = github_input # Assume they typed just the username
+        parts = re.split(r'[\n,]+', github_input)
+        for part in parts:
+            part = part.strip()
+            if part:
+                u = extract_github_username(part) if 'github.com' in part else part
+                if u:
+                    usernames.append(u)
 
     # Check if file uploaded
-    if not username and 'file_upload' in request.files:
+    if 'file_upload' in request.files:
         file = request.files['file_upload']
         if file.filename != '':
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
             file.save(filepath)
             text_content = extract_text_from_file(filepath, file.filename)
-            if text_content is None:
-                flash("Error reading the file. Please try a different file.", 'error')
-                return redirect(url_for('index'))
             
-            username = extract_github_username(text_content)
-            
-            # Clean up file in finally block or check permissions
+            # Clean up file
             try:
                 os.remove(filepath)
             except Exception as e:
                 print(f"Error removing file {filepath}: {e}")
 
-    if username:
-        stats = get_github_stats(username)
-        if stats['error']:
-            flash(stats['error'], 'error')
-            return redirect(url_for('index'))
-        return render_template('dashboard.html', stats=stats)
-    else:
-        flash("Could not detect a GitHub username or Link.", 'error')
-        return redirect(url_for('index'))
+            if text_content:
+                # Try to find all github links in text
+                found_usernames = re.findall(r'github\.com/([a-zA-Z0-9-]+)', text_content)
+                if found_usernames:
+                    usernames.extend(found_usernames)
+                else:
+                    # Fallback single extraction if regex fails
+                    u = extract_github_username(text_content)
+                    if u: usernames.append(u)
+            else:
+                flash("Error reading the file or empty file.", 'error')
+
+    # Remove duplicates
+    usernames = list(set(usernames))
+    
+    if not usernames:
+         flash("Could not detect any GitHub usernames or Links.", 'error')
+         return redirect(url_for('index'))
+
+    stats_list = []
+    for username in usernames:
+        s = get_github_stats(username)
+        stats_list.append(s)
+
+    return render_template('dashboard.html', stats_list=stats_list)
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001)
