@@ -44,7 +44,7 @@ def extract_text_from_file(filepath, filename):
         return None # Return None to signal error
     return text
 
-def get_github_stats(username):
+def get_github_stats(username, token=None):
     stats = {
         'username': username,
         'public_repos': 0,
@@ -53,6 +53,7 @@ def get_github_stats(username):
         'total_stars': 0,
         'total_forks': 0,
         'contributions_last_year': 0,
+        'contributions_today': 0,
         'languages': {},
         'avatar_url': '',
         'profile_url': f'https://github.com/{username}',
@@ -63,8 +64,11 @@ def get_github_stats(username):
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
 
-    # 1. Get User Info (Public API)
+    if token:
+        headers['Authorization'] = f'token {token}'
+
     try:
+        # 1. Get User Info (Public API)
         user_url = f"https://api.github.com/users/{username}"
         response = requests.get(user_url, headers=headers)
         if response.status_code == 200:
@@ -80,116 +84,114 @@ def get_github_stats(username):
              stats['error'] = "API Rate Limit Exceeded"
              return stats
 
-        # 2. Get Repos Info (Public API)
-        repos_url = f"https://api.github.com/users/{username}/repos?per_page=100"
-        repo_response = requests.get(repos_url, headers=headers)
-        if repo_response.status_code == 200:
-            repos = repo_response.json()
-            for repo in repos:
-                stats['total_stars'] += repo.get('stargazers_count', 0)
-                stats['total_forks'] += repo.get('forks_count', 0)
-                lang = repo.get('language')
-                if lang:
-                    stats['languages'][lang] = stats['languages'].get(lang, 0) + 1
+        # 2. Get Repos Info (Public API) - With Pagination
+        page = 1
+        while True:
+            repos_url = f"https://api.github.com/users/{username}/repos?per_page=100&page={page}"
+            repo_response = requests.get(repos_url, headers=headers)
+            if repo_response.status_code == 200:
+                repos = repo_response.json()
+                if not repos:
+                    break
+                for repo in repos:
+                    # Filter for owned repos if needed, but here we count all public ones
+                    stats['total_stars'] += repo.get('stargazers_count', 0)
+                    stats['total_forks'] += repo.get('forks_count', 0)
+                    lang = repo.get('language')
+                    if lang:
+                        stats['languages'][lang] = stats['languages'].get(lang, 0) + 1
+                if len(repos) < 100:
+                    break
+                page += 1
+            else:
+                break
         
         # 3. Scrape Contributions
-        # Try multiple selectors as GitHub structure varies
         profile_url = f"https://github.com/{username}"
         profile_response = requests.get(profile_url, headers=headers)
         if profile_response.status_code == 200:
             soup = BeautifulSoup(profile_response.content, 'html.parser')
             
-            # Method 1: Look for the specific H2 that says "contributions in the last year"
-            h2_tags = soup.find_all('h2')
-            found_contrib = False
-            for h2 in h2_tags:
-                text = h2.get_text().strip()
-                if 'contributions' in text and 'last year' in text:
-                    num_str = text.split()[0].replace(',', '')
-                    if num_str.isdigit():
-                        stats['contributions_last_year'] = int(num_str)
-                        found_contrib = True
-                    break
+            # Method 1: Total contributions in the last year (H2)
+            # Try specific ID first
+            h2_contrib = soup.find('h2', id='js-contribution-activity-description')
+            if not h2_contrib:
+                # Fallback to searching all h2 tags
+                h2_tags = soup.find_all('h2')
+                for h2 in h2_tags:
+                    if 'contributions' in h2.get_text().lower() and 'last year' in h2.get_text().lower():
+                        h2_contrib = h2
+                        break
             
-            # Method 2: Count the "green boxes" (contribution calendar) directly
-            # This is what the user specifically asked for "count the contribution ion green box"
-            if not found_contrib or stats['contributions_last_year'] == 0:
-                calendar = soup.find('table', class_='ContributionCalendar-grid')
-                if not calendar:
-                    # Fallback for old structure or different view
-                    calendar = soup.find('div', class_='js-calendar-graph')
+            if h2_contrib:
+                text = h2_contrib.get_text().strip()
+                # Use regex to find the first number (handles "3,119", "0", etc.)
+                match = re.search(r'([\d,]+)', text)
+                if match:
+                    stats['contributions_last_year'] = int(match.group(1).replace(',', ''))
+            
+            # Method 2: Scrape calendar for accurate counts and today's stats
+            calendar = soup.find('table', class_='ContributionCalendar-grid')
+            if not calendar:
+                calendar = soup.find(class_='js-calendar-graph')
 
-                if not calendar:
-                     # Check for include-fragment (dynamic loading)
-                     include_fragments = soup.find_all('include-fragment')
-                     for frag in include_fragments:
-                         if frag.get('src') and 'contributions' in frag['src']:
-                             print(f"Found contribution fragment: {frag['src']}")
-                             try:
-                                 frag_url = f"https://github.com{frag['src']}"
-                                 frag_resp = requests.get(frag_url, headers=headers)
-                                 if frag_resp.status_code == 200:
-                                     frag_soup = BeautifulSoup(frag_resp.content, 'html.parser')
-                                     calendar = frag_soup.find('table', class_='ContributionCalendar-grid')
-                                     if not calendar:
-                                         calendar = frag_soup.find('div', class_='js-calendar-graph')
-                                     if calendar:
-                                         break
-                             except Exception as e:
-                                 print(f"Error fetching fragment: {e}")
+            if not calendar:
+                 # Check for include-fragment or data-graph-url
+                 frags = soup.find_all(['include-fragment', 'div'], src=True) or soup.find_all('div', attrs={'data-graph-url': True})
+                 for frag in frags:
+                     src = frag.get('src') or frag.get('data-graph-url')
+                     if src and 'contributions' in src:
+                         try:
+                             frag_url = f"https://github.com{src}" if src.startswith('/') else src
+                             frag_resp = requests.get(frag_url, headers=headers)
+                             if frag_resp.status_code == 200:
+                                 frag_soup = BeautifulSoup(frag_resp.content, 'html.parser')
+                                 calendar = frag_soup.find('table', class_='ContributionCalendar-grid') or frag_soup.find(class_='js-calendar-graph')
+                                 if calendar:
+                                     break
+                         except Exception as e:
+                             print(f"Error fetching fragment: {e}")
+            
+            if calendar:
+                total_count = 0
+                today_count = 0
                 
-                if calendar:
-                    # The contribution cells are usually 'td' or 'rect' with 'data-level' or 'data-count'
-                    print(f"Found contribution calendar. Parsing days...")
-                    
-                    # Check tooltips (modern GitHub)
-                    qt_tooltips = calendar.find_all('tool-tip')
-                    total_count = 0
-                    days = []
-                    
-                    if qt_tooltips:
-                        print(f"Found {len(qt_tooltips)} tooltips")
-                        for tt in qt_tooltips:
-                            txt = tt.get_text().strip()
-                            match = re.search(r'(\d+)\s+contribution', txt)
-                            if match:
-                                total_count += int(match.group(1))
-                    else:
-                        days = calendar.find_all(class_=re.compile(r'ContributionCalendar-day'))
+                # Check tooltips
+                tooltips = calendar.find_all('tool-tip')
+                if tooltips:
+                    for tt in tooltips:
+                        txt = tt.get_text().strip()
+                        match = re.search(r'(\d+)\s+contribution', txt)
+                        if match:
+                            count = int(match.group(1))
+                            total_count += count
+                            today_count = count 
+                
+                # Check sr-only or data-count
+                if total_count == 0:
+                    days = calendar.find_all(class_=re.compile(r'ContributionCalendar-day'))
                     for day in days:
-                        # Try to find the count in the sr-only span (screen reader text)
+                        count = 0
                         sr_only = day.find('span', class_='sr-only')
                         if sr_only:
-                           text_content = sr_only.get_text().strip()
-                           # Format examples: "No contributions on..." or "5 contributions on..."
-                           match_count = re.search(r'(\d+)\s+contribution', text_content)
+                           match_count = re.search(r'(\d+)\s+contribution', sr_only.get_text())
                            if match_count:
                                count = int(match_count.group(1))
-                               total_count += count
-                           elif "No contributions" not in text_content:
-                               # Fallback: check if starts with number
-                               first_word = text_content.split()[0]
+                           elif "No contributions" not in sr_only.get_text():
+                               first_word = sr_only.get_text().strip().split()[0]
                                if first_word.isdigit():
-                                   total_count += int(first_word)
-                    
-                    print(f"Calculated total contributions from calendar: {total_count}")
-                    if total_count > 0:
-                        stats['contributions_last_year'] = total_count
-                        found_contrib = True
-
-                # Method 3: Parsing the SVG rects (Old style if still present/fallback)
-                if not found_contrib:
-                     rects = soup.find_all('rect', class_='day')
-                     if rects:
-                         print("Found SVG rects (old style). Parsing...")
-                         total_count = 0
-                         for rect in rects:
-                             if rect.has_attr('data-count'):
-                                 total_count += int(rect['data-count'])
-                         
-                         print(f"Calculated total contributions from SVG: {total_count}")
-                         if total_count > 0:
-                             stats['contributions_last_year'] = total_count
+                                   count = int(first_word)
+                        else:
+                            cnt = day.get('data-count')
+                            if cnt:
+                                count = int(cnt)
+                        
+                        total_count += count
+                        today_count = count # Last one
+                
+                if total_count > 0 and stats['contributions_last_year'] == 0:
+                    stats['contributions_last_year'] = total_count
+                stats['contributions_today'] = today_count
 
     except Exception as e:
         print(f"Scraping error: {e}")
@@ -250,9 +252,12 @@ def analyze():
          flash("Could not detect any GitHub usernames or Links.", 'error')
          return redirect(url_for('index'))
 
+    # Check environment variable for token if available (optional/backend only)
+    github_token = os.environ.get('GITHUB_TOKEN')
+
     stats_list = []
     for username in usernames:
-        s = get_github_stats(username)
+        s = get_github_stats(username, token=github_token)
         stats_list.append(s)
 
     return render_template('dashboard.html', stats_list=stats_list)
